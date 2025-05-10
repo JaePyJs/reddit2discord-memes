@@ -13,7 +13,7 @@ pip install -r requirements.txt
 DISCORD_TOKEN=YOUR_BOT_TOKEN
 
 # 3. Fire it up
-python bot/main.py
+python -m bot.main
 ```
 
 > SQLite (`meme_bot.db`) stores subreddit settings & seen-post IDs – safe across restarts.
