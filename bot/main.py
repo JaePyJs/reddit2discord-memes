@@ -5,7 +5,7 @@ import os
 import logging
 import asyncio
 from bot.utils.config import DISCORD_TOKEN
-from bot.integrations.reddit import fetch_top_memes, fetch_random_new_meme, fetch_new_posts, fetch_random_best_post
+from bot.integrations.reddit import fetch_new_posts, fetch_random_best_post
 from bot.utils.template_manager import TemplateManager
 from bot.utils import db
 from PIL import Image, ImageDraw, ImageFont
@@ -15,6 +15,7 @@ from bot.utils.text_utils import draw_wrapped_text
 from bot.utils.font_utils import get_best_fit_font
 from bot.utils.color_utils import get_average_luminance, pick_text_color
 from bot.utils.autopost_store import load_store, save_store, add_subreddit, remove_subreddit, get_subreddits
+from typing import Optional, Dict, Any, List
 
 # Utility logging helpers
 def log_command_registration(cmd_name):
@@ -56,114 +57,163 @@ async def autopost_loop():
                         continue
                     last_id = cfg.get('last_posted_id')
                     last_ts = cfg.get('last_post_ts', 0)
-                    # enforce 5-minute cooldown per subreddit
-                    if discord.utils.utcnow().timestamp() - last_ts < 300:
-                        continue
-                    posts = fetch_new_posts(sub_name, limit=10)
-                    if not posts:
-                        continue
+                    now_ts = discord.utils.utcnow().timestamp()
 
-                    new_posts = []
-                    for p in posts:
-                        if p['id'] == last_id or p['id'] in cfg.get('seen_ids', []):
-                            break
-                        new_posts.append(p)
+                    # NEWEST flow
+                    if now_ts - last_ts >= 300:
+                        posts = fetch_new_posts(sub_name, limit=10)
+                        if posts:
+                            new_posts = []
+                            for p in posts:
+                                if p['id'] == last_id or p['id'] in cfg.get('seen_ids', []):
+                                    break
+                                new_posts.append(p)
+                            if new_posts:
+                                newest_post = new_posts[0]
+                                await send_reddit_embed(channel, sub_name, newest_post, indicator="NEW")
+                                cfg.setdefault('seen_ids', []).append(newest_post['id'])
+                                cfg['last_posted_id'] = newest_post['id']
+                                cfg['last_post_ts'] = now_ts
 
-                    to_post = []
-                    if new_posts:
-                        # only post the most recent (limit 1 per 5 min)
-                        to_post.append(new_posts[0])
-                    else:
-                        # no new image posts; fall back to random best
+                    # BEST flow
+                    last_best_ts = cfg.get('last_best_post_ts', 0)
+                    if now_ts - last_best_ts >= 300:
                         best_post = fetch_random_best_post(sub_name, limit=100)
                         if best_post and best_post['id'] not in cfg.get('seen_ids', []):
-                            to_post.append(best_post)
-
-                    if not to_post:
-                        continue
-
-                    for post in to_post:
-                        p_type = post.get('type', 'image')
-                        embed = discord.Embed(title=post['title'], color=0x3498db, timestamp=discord.utils.utcnow())
-                        embed.url = post['post_url']
-                        embed.set_author(name=f"r/{sub_name}")
-
-                        if p_type == 'image':
-                            embed.set_image(url=post['media_url'])
-                        elif p_type == 'video':
-                            embed.description = f"[Click to view video]({post['media_url']})"
-                            embed.set_footer(text="Video content – cannot embed directly")
-                        elif p_type == 'text':
-                            embed.description = post.get('content_text', '')[:2048]
-
-                        embed.add_field(name='👍 Upvotes', value=str(post.get('ups', 0)), inline=True)
-                        embed.add_field(name='💬 Comments', value=str(post.get('num_comments', 0)), inline=True)
-
-                        embed.set_footer(text=f"Posted {discord.utils.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC • r/{sub_name}")
-
-                        await channel.send(embed=embed)
-
-                        # Track seen ids
-                        cfg.setdefault('seen_ids', []).append(post['id'])
-
-                    # Update last posted id and timestamp based on first element posted
-                    cfg['last_posted_id'] = to_post[0]['id']
-                    cfg['last_post_ts'] = discord.utils.utcnow().timestamp()
+                            await send_reddit_embed(channel, sub_name, best_post, indicator="BEST")
+                            cfg.setdefault('seen_ids', []).append(best_post['id'])
+                            cfg['last_best_post_ts'] = now_ts
             save_store(autopost_store)
         except Exception as e:
             print(f"Autopost loop error: {e}")
         await asyncio.sleep(60)  # poll every 60 seconds to align with 5-min posting limit
 
+def send_reddit_embed(channel, sub_name, post, indicator="NEW"):
+    p_type = post.get('type', 'image')
+    color = 0x3498db if indicator == "NEW" else 0xf39c12
+    embed = discord.Embed(title=f"[{indicator}] {post['title']}", color=color, timestamp=discord.utils.utcnow())
+    embed.url = post['post_url']
+    embed.set_author(name=f"r/{sub_name}")
+
+    if p_type == 'image':
+        embed.set_image(url=post['media_url'])
+    elif p_type == 'video':
+        embed.description = f"[Click to view video]({post['media_url']})"
+        embed.set_footer(text="Video content – cannot embed directly")
+    elif p_type == 'text':
+        embed.description = post.get('content_text', '')[:2048]
+
+    embed.add_field(name='👍 Upvotes', value=str(post.get('ups', 0)), inline=True)
+    embed.add_field(name='💬 Comments', value=str(post.get('num_comments', 0)), inline=True)
+
+    embed.set_footer(text=f"{indicator} • {discord.utils.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC • r/{sub_name}")
+    return channel.send(embed=embed)
+
 # Slash command to enable auto-post for a subreddit in current channel
 @bot.tree.command(guild=discord.Object(id=781372590278311957), name='reddit_autopost', description='Enable Reddit auto-posting for a subreddit URL (e.g., https://www.reddit.com/r/memes/)')
-@app_commands.describe(url='Reddit subreddit URL to enable auto-posting')
-async def reddit_autopost(interaction: discord.Interaction, url: str):
+@app_commands.describe(
+    url='Reddit subreddit URL to enable auto-posting',
+    channel='Target channel to post in (defaults to current channel)'
+)
+async def reddit_autopost(interaction: discord.Interaction, url: str, channel: Optional[discord.TextChannel] = None):
     pattern = r'https?://(www\.)?reddit\.com/r/([A-Za-z0-9_]+)/?'
     m = re.match(pattern, url)
     if not m:
         await interaction.response.send_message('Invalid URL. Provide something like https://www.reddit.com/r/memes/', ephemeral=True)
         return
     subreddit = m.group(2)
-    add_subreddit(interaction.guild.id, subreddit, interaction.channel.id)
+
+    target_channel = channel or interaction.channel  # default to invoking channel
+    # ensure bot has permission to post there
+    if not target_channel.permissions_for(interaction.guild.me).send_messages:
+        await interaction.response.send_message('I do not have permission to send messages in that channel.', ephemeral=True)
+        return
+
+    add_subreddit(interaction.guild.id, subreddit, target_channel.id)
     # Refresh in-memory store
     global autopost_store
     autopost_store = load_store()
-    await interaction.response.send_message(f'Auto-post enabled for r/{subreddit} in this channel.', ephemeral=False)
+    await interaction.response.send_message(f'Auto-post enabled for r/{subreddit} in {target_channel.mention}.', ephemeral=False)
 
-# Interactive disable buttons
-class DisableSubButton(discord.ui.Button):
-    def __init__(self, guild_id: int, subreddit: str):
-        super().__init__(label=f"Disable r/{subreddit}", style=discord.ButtonStyle.danger)
+class AutoPostListView(discord.ui.View):
+    """Paginated list of subreddits with disable buttons and navigation."""
+
+    PAGE_SIZE = 5
+
+    def __init__(self, guild_id: int, subs: Dict[str, Dict[str, Any]]):
+        super().__init__(timeout=120)
         self.guild_id = guild_id
-        self.subreddit = subreddit
+        self.sub_items: List[tuple[str, Dict[str, Any]]] = list(subs.items())  # [(sub, cfg)]
+        self.page = 0
+        self.total_pages = max(1, (len(self.sub_items) + self.PAGE_SIZE - 1) // self.PAGE_SIZE)
+        self.refresh_items()
 
-    async def callback(self, interaction: discord.Interaction):
-        if remove_subreddit(self.guild_id, self.subreddit):
-            await interaction.response.send_message(f'Auto-post disabled for r/{self.subreddit}.', ephemeral=True)
-            # refresh store
-            global autopost_store
-            autopost_store = load_store()
-        else:
-            await interaction.response.send_message('Failed to disable (not found).', ephemeral=True)
+    # ---------------- Helper methods -----------------
+    def make_embed(self) -> discord.Embed:
+        embed = discord.Embed(
+            title=f"Enabled Auto-Post Subreddits (Page {self.page+1}/{self.total_pages})",
+            color=0x2ecc71,
+        )
+        start = self.page * self.PAGE_SIZE
+        for sub, cfg in self.sub_items[start : start + self.PAGE_SIZE]:
+            embed.add_field(name=f"r/{sub}", value=f"Channel: <#{cfg['channel_id']}>", inline=False)
+        embed.set_footer(text="Use the navigation buttons to view more or disable.")
+        return embed
 
-class DisableSubView(discord.ui.View):
-    def __init__(self, guild_id: int, subreddits: list[str]):
-        super().__init__(timeout=60)
-        for sub in subreddits:
-            self.add_item(DisableSubButton(guild_id, sub))
+    def refresh_items(self):
+        # Clear existing dynamic items (keep persistent nav buttons?) – easiest: clear then rebuild
+        for item in list(self.children):
+            self.remove_item(item)
+
+        # Add disable buttons for current page
+        start = self.page * self.PAGE_SIZE
+        for sub, _ in self.sub_items[start : start + self.PAGE_SIZE]:
+            self.add_item(self._make_disable_button(sub))
+
+        # Navigation buttons
+        prev_disabled = self.page == 0
+        next_disabled = self.page >= self.total_pages - 1
+        self.add_item(self._make_nav_button("Prev", "prev", prev_disabled))
+        self.add_item(self._make_nav_button("Next", "next", next_disabled))
+
+    # ---------------- Button factories -----------------
+    def _make_disable_button(self, subreddit: str) -> discord.ui.Button:
+        async def disable_callback(interaction: discord.Interaction):
+            if remove_subreddit(self.guild_id, subreddit):
+                # remove from list and recalc pages
+                self.sub_items = [item for item in self.sub_items if item[0] != subreddit]
+                self.total_pages = max(1, (len(self.sub_items) + self.PAGE_SIZE - 1) // self.PAGE_SIZE)
+                if self.page >= self.total_pages:
+                    self.page = self.total_pages - 1
+                global autopost_store
+                autopost_store = load_store()
+                self.refresh_items()
+                await interaction.response.edit_message(embed=self.make_embed(), view=self)
+            else:
+                await interaction.response.send_message('Failed to disable (not found).', ephemeral=True)
+
+        return discord.ui.Button(label=f"Disable r/{subreddit}", style=discord.ButtonStyle.danger, callback=disable_callback)
+
+    def _make_nav_button(self, label: str, direction: str, disabled: bool) -> discord.ui.Button:
+        async def nav_callback(interaction: discord.Interaction):
+            if direction == "prev" and self.page > 0:
+                self.page -= 1
+            elif direction == "next" and self.page < self.total_pages - 1:
+                self.page += 1
+            self.refresh_items()
+            await interaction.response.edit_message(embed=self.make_embed(), view=self)
+
+        return discord.ui.Button(label=label, style=discord.ButtonStyle.secondary, disabled=disabled, callback=nav_callback)
 
 # Slash command to list enabled subreddits with disable buttons
-@bot.tree.command(guild=discord.Object(id=781372590278311957), name='reddit_autopost_list', description='List or disable active Reddit auto-post subreddits')
+@bot.tree.command(guild=discord.Object(id=781372590278311957), name='reddit_autopost_list', description='Manage active Reddit auto-post subreddits')
 async def reddit_autopost_list(interaction: discord.Interaction):
     subs = get_subreddits(interaction.guild.id)
     if not subs:
         await interaction.response.send_message('No auto-post subreddits configured for this server.', ephemeral=True)
         return
-    embed = discord.Embed(title='Enabled Auto-Post Subreddits')
-    for sub, cfg in subs.items():
-        embed.add_field(name=f"r/{sub}", value=f"Channel: <#{cfg['channel_id']}>", inline=False)
-    view = DisableSubView(interaction.guild.id, list(subs.keys()))
-    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+    view = AutoPostListView(interaction.guild.id, subs)
+    await interaction.response.send_message(embed=view.make_embed(), view=view, ephemeral=True)
 
 # Meme creation command
 @bot.tree.command(guild=discord.Object(id=781372590278311957), name='meme_create', description='Create a meme from a template! Optionally tag up to 5 friends.')

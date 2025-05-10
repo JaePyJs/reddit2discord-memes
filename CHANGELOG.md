@@ -44,3 +44,43 @@
 - Removed legacy `/ppl_meme` command and old meme polling loop.
 - Updated `main.py` to bootstrap the new auto-post loop on `on_ready`.
 - Changelog updated automatically.
+
+## [2025-05-10] - Dual Auto-Post (NEW & BEST)
+
+#### Added
+- Independent 5-minute auto-posting for both **newest** and **best** (top) subreddit posts.
+- Visual indicators `[NEW]` (blue) and `[BEST]` (orange) in embed titles.
+- `last_best_post_ts` field in `autopost_store.py` to track best-post cooldown.
+- Helper `send_reddit_embed()` for consistent embed construction.
+
+#### Changed
+- Refactored `autopost_loop` to post up to two messages per cycle (latest + best) while respecting cooldowns.
+- Consolidated `.gitignore` and resolved README merge conflicts.
+
+## [2025-05-10] - Housekeeping & Persistence
+
+### Added
+- Optional `channel` parameter to `/reddit_autopost` command to select target channel.
+- SQLite persistence for subreddit configurations and seen post IDs (`autopost_store.py` now writes to `meme_bot.db`).
+
+### Changed
+- Migrated storage from JSON (`autopost_store.json`) to SQLite.
+- Updated `README.md` and `MemeGeneratorChecklist.md` to reflect minimal core features.
+- Removed unused imports in `bot/main.py` and resolved minor lint issues.
+
+### Removed
+- Deprecated feature placeholders and overly detailed checklist items not implemented in current version.
+
+## [2025-05-10] - Interactive List & Persistence
+
+### Added
+- Paginated `/reddit_autopost_list` view with **Prev/Next** navigation (5 subs per page) and on-the-fly disable buttons.
+
+### Confirmed
+- Auto-post configuration and seen-post IDs are now persisted in `meme_bot.db`; the list survives bot restarts, crashes, and redeploys.
+
+## [2025-05-10] - Railway Hosting Support
+
+### Added
+- `Procfile` with `worker: python bot/main.py` so the bot can run 24/7 on Railway.
+- README section detailing one-click Railway deployment & CLI instructions.
