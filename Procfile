@@ -1,1 +1,1 @@
-start: python bot/main.py
+start: python main.py
