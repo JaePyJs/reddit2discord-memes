@@ -11,3 +11,4 @@ dnspython>=2.4.0  # For MongoDB connection with SRV URIs
 motor>=3.3.0  # Async MongoDB driver
 numpy>=1.24.0  # For meme effects processing
 redis>=6.0.0  # For caching (optional)
+psutil>=5.9.0  # For performance monitoring

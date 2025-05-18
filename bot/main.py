@@ -51,7 +51,10 @@ async def load_extensions():
         "bot.features.music.commands_setup",
         # "bot.features.memes.commands",  # Temporarily disabled until fully fixed
         "bot.features.reddit.commands",
-        "bot.features.ai.commands"
+        "bot.features.ai.commands",
+        "bot.features.tenor.commands",
+        "bot.features.weather.commands",
+        "bot.features.urban.commands"
     ]
 
     for extension in extensions:
