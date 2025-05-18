@@ -31,6 +31,7 @@ try:
     ai_conversations = db["ai_conversations"]
     ai_messages = db["ai_messages"]
     ai_user_preferences = db["ai_user_preferences"]
+    guild_configs = db["guild_configs"]  # Added for context-aware configuration
     logger.info(f"Connected to MongoDB: {MONGO_DB_NAME}")
 except PyMongoError as e:
     logger.error(f"Failed to connect to MongoDB: {e}")
@@ -41,6 +42,7 @@ except PyMongoError as e:
     ai_conversations = None
     ai_messages = None
     ai_user_preferences = None
+    guild_configs = None
 
 # Create indexes for better query performance
 async def create_indexes():
@@ -64,6 +66,9 @@ async def create_indexes():
         # Message indexes
         await ai_messages.create_index("conversation_id")
         await ai_messages.create_index([("conversation_id", 1), ("timestamp", 1)])
+
+        # Guild config indexes
+        await guild_configs.create_index("guild_id", unique=True)
 
         logger.info("MongoDB indexes created successfully.")
     except PyMongoError as e:
@@ -641,4 +646,77 @@ async def optimize_conversation_storage(channel_id: str, max_messages: int = 50)
         return True
     except PyMongoError as e:
         logger.error(f"MongoDB error in optimize_conversation_storage: {e}")
+        return False
+
+# Guild configuration functions
+async def get_guild_config(guild_id: int) -> Dict[str, Any]:
+    """
+    Get configuration for a guild.
+
+    Args:
+        guild_id: Discord guild ID
+
+    Returns:
+        Dictionary of guild configuration
+    """
+    if guild_configs is None:
+        logger.warning("MongoDB not available. Using default configuration.")
+        return get_default_guild_config()
+
+    try:
+        config = await guild_configs.find_one({"guild_id": str(guild_id)})
+        if config:
+            return config
+        else:
+            # Return default config if none exists
+            return get_default_guild_config()
+    except PyMongoError as e:
+        logger.error(f"MongoDB error in get_guild_config: {e}")
+        return get_default_guild_config()
+
+def get_default_guild_config() -> Dict[str, Any]:
+    """
+    Get default guild configuration.
+
+    Returns:
+        Dictionary of default configuration values
+    """
+    return {
+        "bot_config": {
+            "max_context_messages": 5,
+            "enable_context_awareness": True,
+            "mention_response_length": "medium"  # short, medium, long
+        }
+    }
+
+async def update_guild_config(guild_id: int, config_path: str, value: Any) -> bool:
+    """
+    Update a specific configuration value for a guild.
+
+    Args:
+        guild_id: Discord guild ID
+        config_path: Path to the configuration value (e.g., "bot_config.max_context_messages")
+        value: New value
+
+    Returns:
+        True if updated successfully
+    """
+    if guild_configs is None:
+        logger.warning("MongoDB not available. Using in-memory storage.")
+        return False
+
+    try:
+        result = await guild_configs.update_one(
+            {"guild_id": str(guild_id)},
+            {
+                "$set": {
+                    config_path: value,
+                    "updated_at": datetime.datetime.now()
+                }
+            },
+            upsert=True
+        )
+        return result.acknowledged
+    except PyMongoError as e:
+        logger.error(f"MongoDB error in update_guild_config: {e}")
         return False

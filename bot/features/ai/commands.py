@@ -3,14 +3,23 @@ from discord import app_commands
 from discord.ext import commands
 import logging
 import asyncio
-from typing import Optional
+import re
+from typing import Optional, Dict, Any
 from bot.features.ai.chat import (
     set_ai_channel, is_ai_channel, get_ai_channel, get_ai_response,
     clear_chat_history, split_message, format_error_message, create_ai_response_embed,
     set_user_preference, get_user_preferences, should_create_thread, extract_thread_topic,
     create_thread_for_topic, handle_long_response, format_markdown, create_table_markdown
 )
-from bot.core.config import OPENROUTER_API_KEY
+from bot.features.ai.context import (
+    get_message_context, needs_context, is_asking_for_clarification,
+    format_context_for_ai, get_cached_context
+)
+from bot.core.config import OPENROUTER_API_KEY, USE_MONGO_FOR_AI
+
+# Import MongoDB utilities if enabled
+if USE_MONGO_FOR_AI:
+    from bot.utils import mongo_db
 
 class AICommands(commands.Cog):
     """AI chat commands"""
@@ -22,7 +31,10 @@ class AICommands(commands.Cog):
     async def on_message(self, message: discord.Message):
         """
         Event handler for incoming messages to process AI chat responses.
-        Only responds in the designated AI chat channel or in DMs.
+        Responds in:
+        1. Designated AI chat channels
+        2. Direct Messages (DMs)
+        3. When the bot is mentioned in any channel
         """
         # Ignore messages from bots (including self) to prevent loops
         if message.author.bot:
@@ -143,16 +155,32 @@ class AICommands(commands.Cog):
 
             return
 
-        # Only process in guild channels that are set as AI channels
+        # Get guild and channel IDs
         guild_id = message.guild.id
         channel_id = message.channel.id
 
         # Check if this is the designated AI chat channel
-        if not is_ai_channel(guild_id, channel_id):
+        is_designated_channel = is_ai_channel(guild_id, channel_id)
+
+        # Check if the bot is mentioned
+        is_mentioned = self.bot.user in message.mentions
+
+        # Only proceed if this is an AI channel or the bot is mentioned
+        if not (is_designated_channel or is_mentioned):
             return
 
         # Get the message content
         content = message.content.strip()
+
+        # If this is a mention, remove the mention from the content
+        if is_mentioned:
+            # Extract content without the mention
+            content = re.sub(r'<@!?[0-9]+>', '', content).strip()
+
+            # If there's no content after removing the mention, provide a helpful response
+            if not content:
+                await message.reply("Hi there! You can ask me anything or chat with me by mentioning me.")
+                return
 
         # Check for image attachments
         image_urls = []
@@ -161,15 +189,23 @@ class AICommands(commands.Cog):
                 image_urls.append(attachment.url)
 
         # Skip empty messages with no attachments or those that appear to be commands
-        if (not content and not image_urls) or content.startswith('/'):
+        if (not content and not image_urls) or (content.startswith('/') and not is_mentioned):
             return
 
         # Special commands to clear history
         if content.lower() in ['clear history', 'reset conversation', 'reset', 'start over', 'clear chat']:
-            if clear_chat_history(channel_id):
-                await message.reply("✅ Chat history cleared. Starting fresh!")
+            # For mentions, create a special channel ID
+            if is_mentioned and not is_designated_channel:
+                mention_channel_id = f"mention_{channel_id}_{message.author.id}"
+                if clear_chat_history(mention_channel_id):
+                    await message.reply("✅ Chat history cleared. Starting fresh!")
+                else:
+                    await message.reply("No chat history to clear!")
             else:
-                await message.reply("No chat history to clear!")
+                if clear_chat_history(channel_id):
+                    await message.reply("✅ Chat history cleared. Starting fresh!")
+                else:
+                    await message.reply("No chat history to clear!")
             return
 
         # Send typing indicator to show the bot is processing
@@ -188,6 +224,40 @@ class AICommands(commands.Cog):
                 _ = preferences.get("emoji_level", "moderate")
                 _ = preferences.get("use_name", True)
 
+                # Get guild configuration for context awareness
+                guild_config = None
+                if USE_MONGO_FOR_AI:
+                    guild_config = await mongo_db.get_guild_config(guild_id)
+
+                # Get context settings
+                max_context_messages = 5  # Default
+                enable_context_awareness = True  # Default
+
+                if guild_config and "bot_config" in guild_config:
+                    bot_config = guild_config.get("bot_config", {})
+                    max_context_messages = bot_config.get("max_context_messages", 5)
+                    enable_context_awareness = bot_config.get("enable_context_awareness", True)
+
+                # Initialize context string
+                context_str = ""
+
+                # For mentions, create a special channel ID
+                if is_mentioned and not is_designated_channel:
+                    channel_id = f"mention_{channel_id}_{message.author.id}"
+
+                    # Check if the message likely needs context
+                    if enable_context_awareness and needs_context(content):
+                        # Get previous messages for context
+                        context_messages = await get_message_context(
+                            message.channel,
+                            message,
+                            max_messages=max_context_messages
+                        )
+
+                        # Format context for the AI
+                        if context_messages:
+                            context_str = await format_context_for_ai(context_messages)
+
                 # Build a system prompt for a super casual, best-friend-like chat
                 system_prompt = (
                     f"You are Nite, everyone's best friend chatting on Discord. Your personality is casual, warm, and authentic. "
@@ -205,18 +275,25 @@ class AICommands(commands.Cog):
                     f"If someone sends an image, describe what you see in a natural way, as if you're just chatting with a friend who shared a photo. "
                     f"Comment on images casually like 'Oh cool pic!' or 'Nice photo!' followed by observations about what you see. "
                     f"This is a group chat where multiple users might be talking. Pay attention to usernames to know who's talking. "
-                    f"When multiple people are chatting, make sure to address the specific person you're responding to by using their name followed by a comma or by @mentioning them. "
+                    f"When multiple people are chatting, make sure to address the specific person you're responding to by using their name or by @mentioning them. "
                     f"Always respond to the most recent message in the conversation, which is from {message.author.display_name}. "
                     f"If someone asks about an image that was shared earlier, describe what was in that image based on your previous responses. "
                     f"You can use Discord's markdown formatting in your responses: **bold** for emphasis, *italics* for subtle emphasis, and ```code blocks``` for code or technical information. "
                     f"For complex topics, you can create a thread by detecting when someone types !thread or asks a complex question. "
                     f"You can also respond to natural language commands like 'delete the last 5 messages' if the user has appropriate permissions. "
+                    f"If you're unsure what the user is referring to, politely ask for clarification. "
                     f"IMPORTANT: Your responses should NOT be structured like an AI assistant - no formal introductions, no 'I'd be happy to help' phrases, and no summarizing at the end."
                 )
 
+                # If we have context, add it to the prompt
+                if context_str:
+                    prompt = f"{context_str}Now responding to: {content}"
+                else:
+                    prompt = content
+
                 # Pass username, user ID, image URLs, and original message for advanced features
                 response = await get_ai_response(
-                    content,
+                    prompt,
                     channel_id,
                     system_prompt,
                     message.author.display_name,
@@ -248,7 +325,7 @@ class AICommands(commands.Cog):
                     )
 
                     # If we need to create a thread, do it with the first message
-                    if create_thread:
+                    if create_thread and not is_mentioned:
                         thread_topic = extract_thread_topic(content)
                         thread = await create_thread_for_topic(reply_message, thread_topic)
 
@@ -267,7 +344,7 @@ class AICommands(commands.Cog):
                     reply_message = await message.reply(response_parts[0], mention_author=True)
 
                     # If we need to create a thread, do it with the reply message
-                    if create_thread:
+                    if create_thread and not is_mentioned:
                         thread_topic = extract_thread_topic(content)
                         thread = await create_thread_for_topic(reply_message, thread_topic)
 
@@ -400,6 +477,114 @@ class AICommands(commands.Cog):
             await interaction.response.send_message("No chat history to clear!", ephemeral=True)
 
     @app_commands.command(
+        name='set_context_depth',
+        description='Set how many previous messages the bot checks for context'
+    )
+    @app_commands.describe(
+        depth='Number of previous messages to check (1-10)'
+    )
+    async def set_context_depth(self, interaction: discord.Interaction, depth: int):
+        """Set the number of previous messages to check for context"""
+        # Ensure we're in a guild
+        if not interaction.guild:
+            await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+            return
+
+        # Check permissions
+        if not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message(
+                "You need 'Manage Server' permission to change bot configuration.",
+                ephemeral=True
+            )
+            return
+
+        # Validate depth
+        if depth < 1 or depth > 10:
+            await interaction.response.send_message(
+                "Context depth must be between 1 and 10 messages.",
+                ephemeral=True
+            )
+            return
+
+        # Update configuration
+        if USE_MONGO_FOR_AI:
+            try:
+                await mongo_db.update_guild_config(
+                    interaction.guild.id,
+                    "bot_config.max_context_messages",
+                    depth
+                )
+            except Exception as e:
+                logging.error(f"Error updating guild configuration: {e}")
+                await interaction.response.send_message(
+                    f"Error updating configuration: {str(e)}",
+                    ephemeral=True
+                )
+                return
+
+        # Confirm the change
+        await interaction.response.send_message(
+            f"Context depth set to {depth} messages. When mentioned, I'll check up to {depth} previous messages for context.",
+            ephemeral=False
+        )
+
+    @app_commands.command(
+        name='toggle_context_awareness',
+        description='Enable or disable context awareness for mentions'
+    )
+    async def toggle_context_awareness(self, interaction: discord.Interaction):
+        """Toggle whether the bot uses context awareness when mentioned"""
+        # Ensure we're in a guild
+        if not interaction.guild:
+            await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+            return
+
+        # Check permissions
+        if not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message(
+                "You need 'Manage Server' permission to change bot configuration.",
+                ephemeral=True
+            )
+            return
+
+        # Get current setting
+        current_setting = True  # Default
+        if USE_MONGO_FOR_AI:
+            try:
+                guild_config = await mongo_db.get_guild_config(interaction.guild.id)
+                if guild_config and "bot_config" in guild_config:
+                    current_setting = guild_config["bot_config"].get("enable_context_awareness", True)
+            except Exception as e:
+                logging.error(f"Error getting guild configuration: {e}")
+
+        # Toggle the setting
+        new_setting = not current_setting
+
+        # Update configuration
+        if USE_MONGO_FOR_AI:
+            try:
+                await mongo_db.update_guild_config(
+                    interaction.guild.id,
+                    "bot_config.enable_context_awareness",
+                    new_setting
+                )
+            except Exception as e:
+                logging.error(f"Error updating guild configuration: {e}")
+                await interaction.response.send_message(
+                    f"Error updating configuration: {str(e)}",
+                    ephemeral=True
+                )
+                return
+
+        # Confirm the change
+        status = "enabled" if new_setting else "disabled"
+        await interaction.response.send_message(
+            f"Context awareness is now {status}. When mentioned, I'll " +
+            ("check previous messages for context." if new_setting else "no longer check previous messages for context."),
+            ephemeral=False
+        )
+
+    @app_commands.command(
         name='ai_chat_help',
         description='Get help with using the AI chatbot'
     )
@@ -426,7 +611,18 @@ class AICommands(commands.Cog):
                 "Simply send messages in the designated AI chat channel to talk with the AI.\n"
                 "You can also send images, and the AI will describe and comment on them!\n"
                 "The bot will respond to all messages in that channel that aren't commands.\n"
+                "You can also mention the bot in any channel to chat with it!\n"
                 "For complex topics, the bot can create threads to keep conversations organized."
+            ),
+            inline=False
+        )
+
+        embed.add_field(
+            name="Context Awareness",
+            value=(
+                "When you mention the bot with references like 'this' or 'that', it will check previous messages for context.\n"
+                "Use `/set_context_depth` to set how many previous messages the bot checks (1-10).\n"
+                "Use `/toggle_context_awareness` to enable or disable this feature."
             ),
             inline=False
         )
