@@ -1,6 +1,7 @@
 # Meme Bot – Feature Checklist
 
 ## ✅ Completed
+
 - [x] Project setup & environment configuration
 - [x] `/meme_create` – template-based meme generation
 - [x] Reddit auto-post system
@@ -9,11 +10,15 @@
   - duplicate-post prevention across restarts
 - [x] SQLite persistence (`meme_bot.db`)
 - [x] Basic logging & error handling
+- [x] Additional meme effects system
+  - 9 special effects (deep-fry, vaporwave, etc.)
+  - `/meme_effects` command to list available options
 
 ## 🔄 In Progress / Planned
-- [ ] Additional meme effects (deep-fry, GIF/Giphy support)
-- [ ] Template browser & upload commands
+
+- [ ] GIF support and animated memes
+- [x] Template browser & upload commands
 - [ ] User profiles, ratings & analytics
 - [ ] Testing & CI pipeline
 
-*Keep this file updated whenever features are added or completed.*
+_Keep this file updated whenever features are added or completed._

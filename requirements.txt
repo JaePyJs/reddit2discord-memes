@@ -1,4 +1,13 @@
-discord.py>=2.3.2
-Pillow>=10.0.0
+discord.py>=2.5.0
+Pillow>=11.0.0
 python-dotenv>=1.0.0
 requests>=2.31.0
+PyNaCl>=1.5.0  # For voice support
+yt-dlp>=2025.4.1  # For YouTube downloads
+spotipy>=2.25.0  # For Spotify integration
+aiohttp>=3.8.0  # For API requests in AI chat integration
+pymongo>=4.5.0  # MongoDB driver
+dnspython>=2.4.0  # For MongoDB connection with SRV URIs
+motor>=3.3.0  # Async MongoDB driver
+numpy>=1.24.0  # For meme effects processing
+redis>=6.0.0  # For caching (optional)

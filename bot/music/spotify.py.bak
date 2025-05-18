@@ -1,0 +1,139 @@
+import spotipy 
+from spotipy.oauth2 import SpotifyClientCredentials 
+import logging 
+import re
+from bot.utils.config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET 
+ 
+class SpotifyClient: 
+    """Client for interacting with the Spotify API""" 
+    def __init__(self): 
+        try:
+            # Log the credentials we're using (without showing full secret)
+            client_id = SPOTIFY_CLIENT_ID
+            client_secret = SPOTIFY_CLIENT_SECRET
+            
+            if not client_id or not client_secret:
+                logging.error("Spotify credentials are missing. Make sure SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET are set in .env")
+                self.initialized = False
+                self.error_message = "Spotify credentials are missing. Please add SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET to your .env file."
+                return
+            
+            # Check if credentials look valid (basic format check)
+            if len(client_id) < 10 or len(client_secret) < 10:
+                logging.error("Spotify credentials appear to be invalid (too short)")
+                self.initialized = False
+                self.error_message = "Spotify credentials appear to be invalid. Please check your .env file."
+                return
+                
+            # Log partial credentials for debugging
+            logging.info(f"Initializing Spotify client with ID: {client_id[:5]}...{client_id[-5:]} and Secret: {client_secret[:3]}...{client_secret[-3:]}")
+            
+            # Create credentials manager with proper error handling
+            try:
+                self.client_credentials_manager = SpotifyClientCredentials( 
+                    client_id=client_id,  
+                    client_secret=client_secret 
+                )
+                self.spotify = spotipy.Spotify(client_credentials_manager=self.client_credentials_manager)
+                # Test the credentials by making a simple API call
+                self.spotify.search(q='test', limit=1)
+                self.initialized = True
+                self.error_message = None
+                logging.info("Spotify client successfully initialized")
+            except spotipy.SpotifyException as e:
+                logging.error(f"Spotify credential error: {e}")
+                self.initialized = False
+                self.error_message = f"Spotify API error: {str(e)}"
+        except Exception as e: 
+            logging.error(f"Failed to initialize Spotify client: {e}") 
+            self.initialized = False
+            self.error_message = f"Failed to initialize Spotify client: {str(e)}"    async def get_track(self, track_id): 
+        """Get information about a Spotify track""" 
+        if not self.initialized: 
+            raise Exception("Spotify client not initialized") 
+ 
+        track_info = self.spotify.track(track_id) 
+ 
+        return { 
+            'title': track_info['name'], 
+            'artist': ", ".join([artist['name'] for artist in track_info['artists']]), 
+            'search_query': f"{track_info['name']} {track_info['artists'][0]['name']} audio" 
+        }
+ 
+    async def get_playlist_tracks(self, url): 
+        """Get tracks from a Spotify playlist""" 
+        if not self.initialized: 
+            raise Exception("Spotify client not initialized") 
+ 
+        # Extract playlist ID from URL 
+        playlist_id = url.split("/")[-1].split("?")[0] 
+ 
+        results = self.spotify.playlist_items(playlist_id) 
+        tracks = results['items'] 
+ 
+        # Paginate through the results 
+        while results['next']: 
+            results = self.spotify.next(results) 
+            tracks.extend(results['items']) 
+ 
+        track_info = [] 
+        for item in tracks: 
+            track = item['track'] 
+            if track: 
+                track_info.append({ 
+                    'title': track['name'], 
+                    'artist': ", ".join([artist['name'] for artist in track['artists']]), 
+                    'search_query': f"{track['name']} {track['artists'][0]['name']} audio" 
+                }) 
+ 
+        return track_info 
+ 
+    async def get_album_tracks(self, url): 
+        """Get tracks from a Spotify album""" 
+        if not self.initialized: 
+            raise Exception("Spotify client not initialized") 
+ 
+        # Extract album ID from URL 
+        album_id = url.split("/")[-1].split("?")[0] 
+ 
+        album = self.spotify.album(album_id) 
+        tracks = album['tracks']['items'] 
+ 
+        track_info = [] 
+        for track in tracks: 
+            track_info.append({ 
+                'title': track['name'], 
+                'artist': ", ".join([artist['name'] for artist in track['artists']]), 
+                'search_query': f"{track['name']} {track['artists'][0]['name']} audio" 
+            }) 
+ 
+        return track_info     async def parse_spotify_url(self, url): 
+        """Parse a Spotify URL and return appropriate data""" 
+        if not self.initialized:
+            if hasattr(self, 'error_message') and self.error_message:
+                raise Exception(self.error_message)
+            else:
+                raise Exception("Spotify client not initialized")
+                
+        try:
+            # Improved URL validation and parsing
+            url_pattern = r'https://open\.spotify\.com/(?:intl-[a-z]{2}/)?([a-z]+)/([a-zA-Z0-9]+)(?:\?.*)?'
+            match = re.match(url_pattern, url)
+            
+            if not match:
+                raise ValueError("Invalid Spotify URL format")
+                
+            content_type, content_id = match.groups()
+            
+            if content_type == 'track':
+                return [await self.get_track(content_id)]
+            elif content_type == 'playlist':
+                return await self.get_playlist_tracks(content_id)
+            elif content_type == 'album':
+                return await self.get_album_tracks(content_id)
+            else:
+                raise ValueError(f"Unsupported Spotify content type: {content_type}")
+                
+        except Exception as e: 
+            logging.error(f"Error parsing Spotify URL {url}: {e}") 
+            raise Exception(f"Error processing Spotify URL: {str(e)}")

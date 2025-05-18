@@ -1,7 +1,8 @@
 import requests
 import random
 
-USER_AGENT = 'DiscordMemeBot/1.0 by YourUsername'
+# Use a proper User-Agent to comply with Reddit's API guidelines
+USER_AGENT = 'RedditDiscordMemeBot/1.0 (by u/JaePyJs)'
 REDDIT_URL = 'https://www.reddit.com'
 HEADERS = {'User-Agent': USER_AGENT}
 
@@ -13,34 +14,34 @@ POPULAR_MEME_SUBS = [
 def fetch_top_memes(subreddit=None, limit=5, time_filter='day'):
     if not subreddit:
         subreddit = random.choice(POPULAR_MEME_SUBS)
-    
+
     # Try different time filters if the first one doesn't work
     time_filters = [time_filter, 'week', 'month', 'all']
-    
+
     for current_filter in time_filters:
         # Print debug info
         print(f"Fetching from r/{subreddit} with time filter: {current_filter}")
-        
+
         url = f'{REDDIT_URL}/r/{subreddit}/top.json'
         params = {'limit': 25, 't': current_filter}  # Fetch more posts to increase chances of finding images
-        
+
         try:
             resp = requests.get(url, headers=HEADERS, params=params, timeout=10)
-            
+
             if resp.status_code == 200:
                 data = resp.json()
-                
+
                 # Check if we got valid data
                 if 'data' in data and 'children' in data['data']:
                     posts = data['data']['children']
                     print(f"Found {len(posts)} posts in r/{subreddit}")
-                    
+
                     # Filter for image posts with more formats
                     memes = []
                     for p in posts:
                         post_data = p.get('data', {})
                         post_url = post_data.get('url', '')
-                        
+
                         # Check for direct image links
                         if post_url.endswith(('.jpg', '.png', '.jpeg', '.gif', '.webp')):
                             memes.append(post_url)
@@ -49,9 +50,9 @@ def fetch_top_memes(subreddit=None, limit=5, time_filter='day'):
                             # For galleries, we can only get the thumbnail
                             if 'thumbnail' in post_data and post_data['thumbnail'].startswith('http'):
                                 memes.append(post_data['thumbnail'])
-                    
+
                     print(f"Found {len(memes)} meme images in r/{subreddit}")
-                    
+
                     # If we found enough memes, return them
                     if len(memes) >= limit:
                         return memes[:limit]
@@ -59,10 +60,10 @@ def fetch_top_memes(subreddit=None, limit=5, time_filter='day'):
                     print(f"Invalid data structure from Reddit for r/{subreddit}")
             else:
                 print(f"Reddit returned status code {resp.status_code} for r/{subreddit}")
-                
+
         except Exception as e:
             print(f"Error fetching from Reddit: {e}")
-    
+
     # If we get here, we couldn't find enough memes with any time filter
     return []
 
@@ -70,20 +71,20 @@ def fetch_top_memes(subreddit=None, limit=5, time_filter='day'):
 def fetch_newest_meme(subreddit):
     """Fetch the newest meme from a subreddit with title, author, and image URL."""
     print(f"Fetching newest meme from r/{subreddit}")
-    
+
     url = f'{REDDIT_URL}/r/{subreddit}/new.json'
     params = {'limit': 25}  # Fetch several posts to find an image
-    
+
     try:
         resp = requests.get(url, headers=HEADERS, params=params, timeout=10)
-        
+
         if resp.status_code == 200:
             data = resp.json()
-            
+
             if 'data' in data and 'children' in data['data']:
                 posts = data['data']['children']
                 print(f"Found {len(posts)} new posts in r/{subreddit}")
-                
+
                 # Look for image posts
                 for p in posts:
                     post_data = p.get('data', {})
@@ -91,19 +92,19 @@ def fetch_newest_meme(subreddit):
                     post_title = post_data.get('title', 'No Title')
                     post_author = post_data.get('author', 'Unknown')
                     post_permalink = post_data.get('permalink', '')
-                    
+
                     # Check for direct image links
                     is_image = post_url.endswith(('.jpg', '.png', '.jpeg', '.gif', '.webp'))
                     is_gallery = 'gallery' in post_url or post_data.get('is_gallery', False)
-                    
+
                     if is_image or is_gallery:
                         # For galleries, use the thumbnail if available
                         if is_gallery and 'thumbnail' in post_data and post_data['thumbnail'].startswith('http'):
                             post_url = post_data['thumbnail']
-                        
+
                         # Create full Reddit post URL
                         reddit_post_url = f"{REDDIT_URL}{post_permalink}"
-                        
+
                         # Include the post ID for tracking
                         post_id = post_data.get('id', '')
                         return {
@@ -113,16 +114,16 @@ def fetch_newest_meme(subreddit):
                             'image_url': post_url,
                             'post_url': reddit_post_url
                         }
-                
+
                 print(f"No image posts found in r/{subreddit}")
             else:
                 print(f"Invalid data structure from Reddit for r/{subreddit}")
         else:
             print(f"Reddit returned status code {resp.status_code} for r/{subreddit}")
-            
+
     except Exception as e:
         print(f"Error fetching from Reddit: {e}")
-    
+
     return None
 
 def fetch_random_new_meme(subreddit, exclude_ids=None, limit=25):
@@ -184,10 +185,10 @@ def fetch_new_posts(subreddit, limit=10):
             is_gallery = 'gallery' in post_url or d.get('is_gallery', False)
             is_video = d.get('is_video', False)
             is_text = bool(d.get('selftext'))
-            
+
             if not (is_img or is_gallery or is_video or is_text):
                 continue
-            
+
             # Media handling
             media_url = None
             content_text = None
@@ -203,7 +204,7 @@ def fetch_new_posts(subreddit, limit=10):
             elif is_text:
                 p_type = 'text'
                 content_text = d.get('selftext')[:1000]
-            
+
             results.append({
                 'id': d.get('id'),
                 'title': d.get('title', ''),

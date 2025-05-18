@@ -1,0 +1,34 @@
+refactor: comprehensive codebase reorganization and Spotify enhancements
+
+This commit includes a major reorganization of the codebase for improved maintainability
+and several enhancements to the Spotify integration.
+
+## Codebase Reorganization
+- Restructured the entire codebase into a more maintainable architecture
+- Organized code by feature modules (memes, music, reddit, ai)
+- Separated core functionality from feature-specific code
+- Created proper __init__.py files for all packages
+- Improved error handling and logging throughout the codebase
+- Updated import statements to reflect the new structure
+- Organized root directory by moving files to appropriate folders:
+  - Moved test files to tests/
+  - Moved documentation files to docs/
+  - Moved utility scripts to scripts/
+  - Moved image files to assets/images/
+
+## Spotify Enhancements
+- Implemented caching system for Spotify tracks to reduce API calls
+- Added pagination support for large Spotify playlists (up to 50 tracks)
+- Enhanced track information display with album art and more details
+- Added visual progress indicators for currently playing tracks
+- Implemented song recommendations based on Spotify's API
+
+## Documentation
+- Updated README.md with the new structure and features
+- Updated CHANGELOG.md to track version history
+- Improved inline documentation throughout the codebase
+
+## Other Improvements
+- Fixed various bugs and edge cases
+- Enhanced error handling for API interactions
+- Improved user experience with better feedback and visuals
