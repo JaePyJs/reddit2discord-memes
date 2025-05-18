@@ -434,10 +434,10 @@ def format_markdown(text: str, message: Optional[discord.Message] = None) -> str
             )
 
             if member:
-                # Replace @username with proper Discord mention followed by a comma
+                # Replace @username with proper Discord mention without a comma
                 text = re.sub(
                     f'@{username}\\b',
-                    f'<@{member.id}>, ',
+                    f'<@{member.id}>',
                     text
                 )
 
@@ -449,7 +449,7 @@ def format_markdown(text: str, message: Optional[discord.Message] = None) -> str
             # Use word boundary to avoid partial matches
             text = re.sub(
                 f'\\b{re.escape(author_name)}\\b(?!,)',  # Match name not followed by comma
-                f'<@{message.author.id}>, ',
+                f'<@{message.author.id}>',
                 text
             )
 
@@ -786,12 +786,12 @@ async def get_ai_response(
                 # If this is from a different user, add their username to help the AI track multiple conversations
                 if user_id and msg.get("user_id") and msg.get("user_id") != user_id:
                     if msg.get("username"):
-                        content = f"{msg.get('username')}, {content}"
+                        content = f"{msg.get('username')} {content}"
                     else:
-                        content = f"Different user, {content}"
+                        content = f"Different user {content}"
                 elif role == "user" and msg.get("username"):
                     # Also add username for the current user's past messages for consistency
-                    content = f"{msg.get('username')}, {content}"
+                    content = f"{msg.get('username')} {content}"
 
                 # Check if this message had an image
                 if msg.get("had_image", False):
@@ -809,12 +809,12 @@ async def get_ai_response(
                     # If this is from a different user, add their username to help the AI track multiple conversations
                     if user_id and msg.get("user_id") and msg.get("user_id") != user_id:
                         if msg.get("username"):
-                            content = f"{msg.get('username')}, {content}"
+                            content = f"{msg.get('username')} {content}"
                         else:
-                            content = f"Different user, {content}"
+                            content = f"Different user {content}"
                     elif role == "user" and msg.get("username"):
                         # Also add username for the current user's past messages for consistency
-                        content = f"{msg.get('username')}, {content}"
+                        content = f"{msg.get('username')} {content}"
 
                     # Check if this message had an image
                     if msg.get("had_image", False):
@@ -831,12 +831,12 @@ async def get_ai_response(
                 # If this is from a different user, add their username to help the AI track multiple conversations
                 if user_id and msg.get("user_id") and msg.get("user_id") != user_id:
                     if msg.get("username"):
-                        content = f"{msg.get('username')}, {content}"
+                        content = f"{msg.get('username')} {content}"
                     else:
-                        content = f"Different user, {content}"
+                        content = f"Different user {content}"
                 elif role == "user" and msg.get("username"):
                     # Also add username for the current user's past messages for consistency
-                    content = f"{msg.get('username')}, {content}"
+                    content = f"{msg.get('username')} {content}"
 
                 # Check if this message had an image
                 if msg.get("had_image", False):
@@ -848,7 +848,7 @@ async def get_ai_response(
     # Add the current prompt with username if available
     user_content = prompt
     if username:
-        user_content = f"{username}, {prompt}"
+        user_content = f"{username} {prompt}"
 
     # Track if this message has an image
     has_image = image_urls and len(image_urls) > 0
