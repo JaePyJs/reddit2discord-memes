@@ -648,6 +648,39 @@ async def optimize_conversation_storage(channel_id: str, max_messages: int = 50)
         logger.error(f"MongoDB error in optimize_conversation_storage: {e}")
         return False
 
+# Chat history management functions
+async def clear_all_conversations():
+    """
+    Clear all chat history from the database.
+
+    This function:
+    1. Deletes all messages
+    2. Marks all conversations as archived
+
+    Returns:
+        True if successful, False otherwise
+    """
+    if ai_conversations is None or ai_messages is None:
+        logger.warning("MongoDB not available. Using in-memory storage.")
+        return False
+
+    try:
+        # Delete all messages
+        messages_result = await ai_messages.delete_many({})
+        logger.info(f"Deleted {messages_result.deleted_count} messages")
+
+        # Mark all conversations as archived
+        conversations_result = await ai_conversations.update_many(
+            {},
+            {"$set": {"is_archived": True, "archived_at": datetime.datetime.now()}}
+        )
+        logger.info(f"Archived {conversations_result.modified_count} conversations")
+
+        return True
+    except PyMongoError as e:
+        logger.error(f"MongoDB error in clear_all_conversations: {e}")
+        return False
+
 # Guild configuration functions
 async def get_guild_config(guild_id: int) -> Dict[str, Any]:
     """

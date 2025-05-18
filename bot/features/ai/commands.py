@@ -585,6 +585,40 @@ class AICommands(commands.Cog):
         )
 
     @app_commands.command(
+        name='clear_all_history',
+        description='Clear all AI chat history from the database (admin only)'
+    )
+    async def clear_all_history(self, interaction: discord.Interaction):
+        """Clear all AI chat history from the database"""
+        # Ensure we're in a guild
+        if not interaction.guild:
+            await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
+            return
+
+        # Check permissions - require administrator
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "You need 'Administrator' permission to clear all chat history.",
+                ephemeral=True
+            )
+            return
+
+        # Defer the response since this might take a while
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
+        # Clear all chat history
+        if USE_MONGO_FOR_AI:
+            try:
+                # Clear all conversations
+                await mongo_db.clear_all_conversations()
+                await interaction.followup.send("✅ All AI chat history has been cleared from the database.", ephemeral=True)
+            except Exception as e:
+                logging.error(f"Error clearing chat history: {e}")
+                await interaction.followup.send(f"Error clearing chat history: {str(e)}", ephemeral=True)
+        else:
+            await interaction.followup.send("MongoDB is not enabled. Cannot clear chat history.", ephemeral=True)
+
+    @app_commands.command(
         name='ai_chat_help',
         description='Get help with using the AI chatbot'
     )
