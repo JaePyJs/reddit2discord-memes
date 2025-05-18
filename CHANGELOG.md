@@ -1,5 +1,20 @@
 # Changelog
 
+## [2025-05-18] - AI Chat User Mention Improvements
+
+### Added
+
+- Enhanced user mention functionality in AI chat responses
+- Added support for proper Discord mentions using `<@user_id>` format
+- Improved detection of usernames without @ symbols
+
+### Changed
+
+- Updated user mention format to use commas instead of square brackets
+- Modified system prompt to emphasize correct mention format
+- Enhanced `format_markdown` function to better handle user mentions
+- Fixed AI chat module structure and format issues
+
 ## [2025-05-22] - Comprehensive Testing, Documentation, and CI/CD Implementation
 
 ### Added

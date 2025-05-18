@@ -9,6 +9,11 @@ This guide explains how to set up the various API integrations used by the bot.
 3. [Urban Dictionary API](#urban-dictionary-api)
 4. [Spotify API](#spotify-api)
 5. [OpenRouter API](#openrouter-api)
+6. [Google Maps API](#google-maps-api)
+7. [News API](#news-api)
+8. [Currency API](#currency-api)
+
+> **Note:** For detailed setup instructions for the new API integrations (Google Maps, News, and Currency), see [NEW_API_SETUP.md](NEW_API_SETUP.md)
 
 ## Tenor GIF API
 
@@ -127,3 +132,39 @@ OPENROUTER_API_KEY=your_api_key_here
 ### Documentation
 
 For more information, see the [OpenRouter API documentation](https://openrouter.ai/docs).
+
+## Google Maps API
+
+The Google Maps API is used for location search, directions, and finding nearby places.
+
+See [NEW_API_SETUP.md](NEW_API_SETUP.md#google-maps-api) for detailed setup instructions.
+
+### Features
+
+- `/location <address>` - Search for a location and display it on a map
+- `/directions <origin> <destination> [mode]` - Get directions between two locations
+- `/nearby <location> [type] [radius]` - Find places near a location
+
+## News API
+
+The News API is used for retrieving news articles and headlines.
+
+See [NEW_API_SETUP.md](NEW_API_SETUP.md#news-api) for detailed setup instructions.
+
+### Features
+
+- `/news [category] [country] [query]` - Get top headlines
+- `/news_search <query> [language] [sort_by]` - Search for news articles
+- `/news_sources [category] [language] [country]` - Get news sources
+
+## Currency API
+
+The Currency API is used for currency conversion and exchange rates.
+
+See [NEW_API_SETUP.md](NEW_API_SETUP.md#currency-api) for detailed setup instructions.
+
+### Features
+
+- `/convert <amount> <from_currency> <to_currency>` - Convert between currencies
+- `/exchange_rates [base_currency]` - Get latest exchange rates
+- `/historical_rates [base_currency] [days_ago]` - Get historical exchange rates

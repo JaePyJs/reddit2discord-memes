@@ -43,6 +43,7 @@ EXCLUDED_FILES = [
     "README.md",
     "docs/API_SETUP.md",
     "scripts/check_secrets.py",
+    "tests/",  # Exclude test files which use dummy API keys
 ]
 
 def get_all_files() -> List[str]:

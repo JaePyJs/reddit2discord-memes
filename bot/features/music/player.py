@@ -11,19 +11,27 @@ from discord.ext import commands, tasks
 from typing import Dict, List, Optional, Any, Union
 from urllib.parse import urlparse, parse_qs
 
-# Configure YT-DLP
+# Configure YT-DLP with improved options
 ytdl_format_options = {
     'format': 'bestaudio/best',
     'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
     'restrictfilenames': True,
-    'noplaylist': True,
+    'noplaylist': False,  # Allow playlists to be processed
     'nocheckcertificate': True,
     'ignoreerrors': False,
     'logtostderr': False,
     'quiet': True,
     'no_warnings': True,
-    'default_search': 'auto',
+    'default_search': 'ytsearch',  # Explicitly use YouTube search
     'source_address': '0.0.0.0',  # Bind to ipv4
+    'geo_bypass': True,  # Try to bypass geo-restrictions
+    'geo_bypass_country': 'US',  # Use US as the geo-bypass country
+    'extract_flat': False,  # Extract full info
+    'postprocessors': [{
+        'key': 'FFmpegExtractAudio',
+        'preferredcodec': 'mp3',
+        'preferredquality': '192',
+    }],
 }
 
 ffmpeg_options = {
@@ -52,7 +60,7 @@ class Song:
     @property
     def thumbnail(self) -> str:
         return self.source.get('thumbnail', '')
-        
+
     @property
     def album_art(self) -> str:
         # Try to get album art from Spotify data, fall back to thumbnail
@@ -62,7 +70,7 @@ class Song:
     def duration(self) -> int:
         """Get duration in seconds"""
         return self.source.get('duration', 0)
-        
+
     @property
     def duration_string(self) -> str:
         """Get formatted duration string"""
@@ -75,12 +83,12 @@ class Song:
             else:
                 return f"{minutes}:{seconds:02d}"
         return "Unknown duration"
-        
+
     @property
     def artist(self) -> str:
         """Get artist name"""
         return self.source.get('artist', 'Unknown artist')
-        
+
     @property
     def album(self) -> str:
         """Get album name"""
@@ -93,52 +101,52 @@ class Song:
             description=f"[{self.title}]({self.url})",
             color=discord.Color.blurple()
         )
-        
+
         # Use album art if available, otherwise use thumbnail
         if self.album_art:
             embed.set_thumbnail(url=self.album_art)
         elif self.thumbnail:
             embed.set_thumbnail(url=self.thumbnail)
-            
+
         # Add artist and album if available
         if self.artist != 'Unknown artist':
             embed.add_field(name="Artist", value=self.artist, inline=True)
         if self.album != 'Unknown album':
             embed.add_field(name="Album", value=self.album, inline=True)
-            
+
         # Add duration
         embed.add_field(name="Duration", value=self.duration_string, inline=True)
-        
+
         # Add progress bar if requested and song is playing
         if show_progress and self.start_time and self.duration:
             elapsed = time.time() - self.start_time
             progress = min(elapsed / self.duration, 1.0)  # Cap at 100%
-            
+
             # Create progress bar (20 characters wide)
             bar_length = 20
             filled_length = int(bar_length * progress)
             bar = "▓" * filled_length + "░" * (bar_length - filled_length)
-            
+
             # Format elapsed/total time
             elapsed_str = str(datetime.timedelta(seconds=int(elapsed)))
             if elapsed_str.startswith('0:'):
                 elapsed_str = elapsed_str[2:]  # Remove leading 0:
             total_str = self.duration_string
-            
+
             embed.add_field(
-                name="Progress", 
-                value=f"`{elapsed_str} {bar} {total_str}`", 
+                name="Progress",
+                value=f"`{elapsed_str} {bar} {total_str}`",
                 inline=False
             )
-        
+
         embed.add_field(name="Requested by", value=self.requester.mention, inline=True)
-        
+
         # Add source info
         if 'spotify' in self.source:
             embed.set_footer(text=f"Spotify Track • Playing via YouTube")
         else:
             embed.set_footer(text=f"Source: YouTube")
-            
+
         return embed
 
 class MusicPlayer:
@@ -155,7 +163,7 @@ class MusicPlayer:
         self.volume = 0.5
         self.loop = False
         self.now_playing_message = None
-        
+
         # Start the player loop and progress updater
         ctx.bot.loop.create_task(self.player_loop())
         self.progress_updater.start()
@@ -192,9 +200,37 @@ class MusicPlayer:
             # Get the source URL
             source_url = self.current.source.get('url')
             if not source_url:
-                await self.channel.send("Error: Could not get audio source. Skipping...")
-                self.current = None
-                continue
+                error_message = "Error: Could not get audio source."
+                if self.current.source.get('error'):
+                    error_message += f" {self.current.source.get('error')}"
+
+                # Try a more generic search as a last resort
+                try:
+                    logging.info("Attempting last-resort search for failed track")
+                    title = self.current.source.get('title', '').replace('Error: Could not load audio for', '').strip("'")
+
+                    if title:
+                        # Create a more generic search query
+                        generic_search = f"{title} audio"
+                        logging.info(f"Trying last-resort search: {generic_search}")
+
+                        # Try to get a source with a more generic search
+                        source_data = await YTDLSource.create_source(generic_search, loop=self.bot.loop, requester=self.current.requester)
+                        if source_data and source_data.get('url'):
+                            source_url = source_data.get('url')
+                            self.current.source = source_data
+                            logging.info(f"Last-resort search successful, found URL: {source_url}")
+                            # Continue with the new source URL
+                        else:
+                            raise Exception("Last-resort search failed")
+                    else:
+                        raise Exception("No title available for last-resort search")
+                except Exception as e:
+                    logging.error(f"Last-resort search failed: {e}")
+                    await self.channel.send(f"{error_message} Skipping... (Try a different search query or URL)")
+                    self.current = None
+                    self.bot.loop.call_soon_threadsafe(self.next.set)
+                    continue
 
             # Set the start time for progress tracking
             self.current.start_time = time.time()
@@ -255,20 +291,20 @@ class MusicPlayer:
         # If not playing and there are songs, trigger the player
         if not self.guild.voice_client.is_playing() and songs:
             self.next.set()
-            
+
     @tasks.loop(seconds=15.0)
     async def progress_updater(self):
         """Update the progress bar in the now playing message"""
         if not self.current or not self.now_playing_message or not self.current.start_time:
             return
-            
+
         try:
             # Update the embed with current progress
             updated_embed = self.current.create_embed(show_progress=True)
             await self.now_playing_message.edit(embed=updated_embed)
         except Exception as e:
             logging.error(f"Error updating progress bar: {e}")
-            
+
     @progress_updater.before_loop
     async def before_progress_updater(self):
         """Wait for the bot to be ready before starting the progress updater"""
@@ -277,80 +313,126 @@ class MusicPlayer:
 class YTDLSource:
     """Source for YouTube audio"""
     spotify_client = None
-    
+
     @classmethod
     async def create_source(cls, search: str, *, loop=None, requester=None):
         """Create a source from a search query or URL"""
         loop = loop or asyncio.get_event_loop()
-        
+
         # Handle Spotify URLs
         spotify_pattern = r'https?://open\.spotify\.com/(track|album|playlist)/[a-zA-Z0-9]+'
+        original_search = search  # Keep the original search for reference
+
         if re.match(spotify_pattern, search):
             try:
                 # Process Spotify URL
                 if cls.spotify_client is None:
                     from bot.features.music.spotify import SpotifyClient
                     cls.spotify_client = SpotifyClient()
-                
+
                 # Make sure the Spotify client is initialized
                 if not cls.spotify_client.initialized:
                     logging.error("Spotify client not initialized. Check credentials.")
                     raise Exception("Spotify client not initialized. Please check your API credentials.")
-                
+
                 # Try to parse the Spotify URL
                 spotify_data = await cls.spotify_client.parse_spotify_url(search)
-                
+
                 if isinstance(spotify_data, list):
                     # Multiple tracks (playlist or album)
                     if not spotify_data:
                         raise Exception("No tracks found in Spotify playlist/album")
-                    
+
                     # Just process the first track for now and return info
                     track = spotify_data[0]
                     search = track['search_query']
-                    logging.info(f"Spotify playlist/album detected. First track: {track['title']} by {track['artist']}")
+                    logging.info(f"Spotify playlist/album detected. First track: {track['title']} by {track.get('artist', 'Unknown')}")
                     # We could add all tracks to queue here if needed
                 else:
                     # Single track
                     search = spotify_data['search_query']
-                    logging.info(f"Spotify track detected: {spotify_data['title']} by {spotify_data['artist']}")
+                    logging.info(f"Spotify track detected: {spotify_data['title']} by {spotify_data.get('artist', 'Unknown')}")
             except Exception as e:
                 logging.error(f"Error processing Spotify URL: {e}")
-                raise Exception(f"Error processing Spotify URL: {str(e)}")
+                # Instead of raising an exception, try a fallback approach
+                logging.info(f"Trying fallback search for Spotify URL: {search}")
 
-        # Process the search query
-        partial = functools.partial(ytdl.extract_info, search, download=False, process=False)
-        data = await loop.run_in_executor(None, partial)
+                # Extract playlist/track name from URL for a better search
+                try:
+                    url_parts = search.split('/')
+                    content_id = url_parts[-1].split('?')[0]
+                    content_type = "playlist" if "playlist" in search else ("album" if "album" in search else "track")
 
-        if data is None:
-            raise Exception(f"Could not find anything that matches `{search}`")
+                    # Create a better fallback search query
+                    if "j-pop" in search.lower() or "jpop" in search.lower():
+                        search = "j-pop hits popular songs playlist"
+                    elif "rock" in search.lower():
+                        search = "rock hits popular songs playlist"
+                    elif "hip hop" in search.lower() or "rap" in search.lower():
+                        search = "hip hop rap hits popular songs playlist"
+                    elif "pop" in search.lower():
+                        search = "pop hits popular songs playlist"
+                    elif content_type == "playlist":
+                        search = "popular music hits playlist"
+                    elif content_type == "album":
+                        search = "popular album songs compilation"
+                    else:
+                        search = "popular music audio"
 
-        if 'entries' in data:
-            # Take the first item from a playlist
-            data = data['entries'][0]
+                    logging.info(f"Using improved fallback search query: {search}")
+                except Exception as fallback_error:
+                    logging.error(f"Error creating fallback search: {fallback_error}")
+                    search = "popular music hits"  # Better last resort fallback
 
-        # Get the full data
-        partial = functools.partial(ytdl.extract_info, data['webpage_url'], download=False)
-        processed_data = await loop.run_in_executor(None, partial)
+        try:
+            # Process the search query
+            partial = functools.partial(ytdl.extract_info, search, download=False, process=False)
+            data = await loop.run_in_executor(None, partial)
 
-        if processed_data is None:
-            raise Exception(f"Could not fetch `{search}`")
-            
-        # Add Spotify metadata if available
-        if re.match(spotify_pattern, search) and cls.spotify_client:
-            try:
-                spotify_data = await cls.spotify_client.parse_spotify_url(search)
-                if isinstance(spotify_data, dict):
-                    processed_data['artist'] = spotify_data.get('artist')
-                    processed_data['album'] = spotify_data.get('album')
-                    processed_data['album_art'] = spotify_data.get('album_art')
-                    processed_data['spotify'] = True
-                elif isinstance(spotify_data, list) and spotify_data:
-                    processed_data['artist'] = spotify_data[0].get('artist')
-                    processed_data['album'] = spotify_data[0].get('album')
-                    processed_data['album_art'] = spotify_data[0].get('album_art')
-                    processed_data['spotify'] = True
-            except Exception as e:
-                logging.error(f"Error adding Spotify metadata: {e}")
+            if data is None:
+                raise Exception(f"Could not find anything that matches `{search}`")
 
-        return processed_data
+            if 'entries' in data:
+                # Take the first item from a playlist
+                if not data['entries']:
+                    raise Exception(f"No results found for `{search}`")
+                data = data['entries'][0]
+
+            # Get the full data
+            partial = functools.partial(ytdl.extract_info, data['webpage_url'], download=False)
+            processed_data = await loop.run_in_executor(None, partial)
+
+            if processed_data is None:
+                raise Exception(f"Could not fetch `{search}`")
+
+            # Add Spotify metadata if available
+            if re.match(spotify_pattern, original_search) and cls.spotify_client:
+                try:
+                    spotify_data = await cls.spotify_client.parse_spotify_url(original_search)
+                    if isinstance(spotify_data, dict):
+                        processed_data['artist'] = spotify_data.get('artist')
+                        processed_data['album'] = spotify_data.get('album')
+                        processed_data['album_art'] = spotify_data.get('album_art')
+                        processed_data['spotify'] = True
+                    elif isinstance(spotify_data, list) and spotify_data:
+                        processed_data['artist'] = spotify_data[0].get('artist')
+                        processed_data['album'] = spotify_data[0].get('album')
+                        processed_data['album_art'] = spotify_data[0].get('album_art')
+                        processed_data['spotify'] = True
+                except Exception as e:
+                    logging.error(f"Error adding Spotify metadata: {e}")
+
+            return processed_data
+        except Exception as e:
+            logging.error(f"Error creating audio source: {e}")
+
+            # Create a minimal source with just enough information to identify it
+            # This allows the player to continue and skip this track if it can't be played
+            return {
+                'title': f"Error: Could not load audio for '{search}'",
+                'webpage_url': f"https://www.youtube.com/results?search_query={search.replace(' ', '+')}",
+                'url': None,  # This will trigger the player to skip
+                'thumbnail': None,
+                'duration': 0,
+                'error': str(e)
+            }

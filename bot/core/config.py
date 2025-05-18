@@ -57,6 +57,21 @@ OPENWEATHERMAP_API_KEY = os.environ.get('OPENWEATHERMAP_API_KEY')
 if not OPENWEATHERMAP_API_KEY:
     secure_logger.warning("OPENWEATHERMAP_API_KEY not found in .env file. Weather functionality will be disabled.")
 
+# Google Maps API key for location services
+GOOGLE_MAPS_API_KEY = os.environ.get('GOOGLE_MAPS_API_KEY')
+if not GOOGLE_MAPS_API_KEY:
+    secure_logger.warning("GOOGLE_MAPS_API_KEY not found in .env file. Maps functionality will be disabled.")
+
+# News API key for news services
+NEWS_API_KEY = os.environ.get('NEWS_API_KEY')
+if not NEWS_API_KEY:
+    secure_logger.warning("NEWS_API_KEY not found in .env file. News functionality will be disabled.")
+
+# Currency API key for currency conversion
+CURRENCY_API_KEY = os.environ.get('CURRENCY_API_KEY')
+if not CURRENCY_API_KEY:
+    secure_logger.warning("CURRENCY_API_KEY not found in .env file. Currency conversion functionality will be disabled.")
+
 # Directory paths
 TEMPLATE_DIR = 'templates'
 SAVED_MEMES_DIR = 'saved_memes'

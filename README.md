@@ -78,7 +78,16 @@ The bot includes an AI-powered chat feature using Llama 4 Maverick through OpenR
 
 Simply send messages in the designated AI chat channel to interact with the bot.
 
-#### 🔧 AI Chat Preferences
+#### �️ User Mentions
+
+The AI chat supports proper Discord user mentions:
+
+- Mentions users with the format `username, message` (with a comma)
+- Supports proper Discord mentions using `<@user_id>` format
+- Automatically detects usernames in messages and converts them to mentions
+- Maintains conversation context across multiple users in a channel
+
+#### �🔧 AI Chat Preferences
 
 Customize your AI chat experience with personalized preferences:
 

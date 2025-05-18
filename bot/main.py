@@ -54,7 +54,10 @@ async def load_extensions():
         "bot.features.ai.commands",
         "bot.features.tenor.commands",
         "bot.features.weather.commands",
-        "bot.features.urban.commands"
+        "bot.features.urban.commands",
+        # "bot.features.maps.commands",    # Temporarily disabled - Google Maps API integration
+        # "bot.features.news.commands",    # Temporarily disabled - News API integration
+        # "bot.features.currency.commands" # Temporarily disabled - Currency API integration
     ]
 
     for extension in extensions:

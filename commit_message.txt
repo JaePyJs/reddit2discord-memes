@@ -1,34 +1,22 @@
-refactor: comprehensive codebase reorganization and Spotify enhancements
+fix: update tests for Music and Reddit commands
 
-This commit includes a major reorganization of the codebase for improved maintainability
-and several enhancements to the Spotify integration.
+This commit fixes the failing tests for Music and Reddit commands by properly mocking
+async methods and using the correct callback approach for testing Discord commands.
 
-## Codebase Reorganization
-- Restructured the entire codebase into a more maintainable architecture
-- Organized code by feature modules (memes, music, reddit, ai)
-- Separated core functionality from feature-specific code
-- Created proper __init__.py files for all packages
-- Improved error handling and logging throughout the codebase
-- Updated import statements to reflect the new structure
-- Organized root directory by moving files to appropriate folders:
-  - Moved test files to tests/
-  - Moved documentation files to docs/
-  - Moved utility scripts to scripts/
-  - Moved image files to assets/images/
+## Test Fixes
+- Fixed Music command tests by properly mocking the bot.add_cog method
+- Updated Music tests to use the callback approach for testing hybrid commands
+- Fixed Reddit command tests by correctly mocking the autopost_store functions
+- Updated Reddit tests to handle the DisableButton callback correctly
+- Modified the test runner to skip disabled API tests when running all tests
 
-## Spotify Enhancements
-- Implemented caching system for Spotify tracks to reduce API calls
-- Added pagination support for large Spotify playlists (up to 50 tracks)
-- Enhanced track information display with album art and more details
-- Added visual progress indicators for currently playing tracks
-- Implemented song recommendations based on Spotify's API
+## Improvements
+- Added better error handling in tests
+- Improved test reliability by using proper mocking techniques
+- Enhanced test coverage for core features
+- Fixed runtime warnings in tests
 
-## Documentation
-- Updated README.md with the new structure and features
-- Updated CHANGELOG.md to track version history
-- Improved inline documentation throughout the codebase
-
-## Other Improvements
-- Fixed various bugs and edge cases
-- Enhanced error handling for API interactions
-- Improved user experience with better feedback and visuals
+## Other Changes
+- Updated MockContext and MockInteraction classes to better simulate Discord's behavior
+- Simplified test setup and teardown procedures
+- Added proper cleanup for async mocks

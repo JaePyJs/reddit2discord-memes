@@ -44,14 +44,28 @@ class SpotifyCache:
             conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
 
-            # Create Spotify cache table
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS spotify_cache (
-                cache_key TEXT PRIMARY KEY,
-                data TEXT NOT NULL,
-                expiry INTEGER NOT NULL
-            )
-            ''')
+            # Check if the table exists
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='spotify_cache'")
+            table_exists = cursor.fetchone() is not None
+
+            if table_exists:
+                # Check if the expiry column exists
+                try:
+                    cursor.execute("SELECT expiry FROM spotify_cache LIMIT 1")
+                except sqlite3.OperationalError:
+                    # Column doesn't exist, drop and recreate the table
+                    cursor.execute("DROP TABLE spotify_cache")
+                    table_exists = False
+
+            if not table_exists:
+                # Create Spotify cache table
+                cursor.execute('''
+                CREATE TABLE IF NOT EXISTS spotify_cache (
+                    cache_key TEXT PRIMARY KEY,
+                    data TEXT NOT NULL,
+                    expiry INTEGER NOT NULL
+                )
+                ''')
 
             conn.commit()
             conn.close()
