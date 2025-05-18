@@ -26,6 +26,7 @@ EXCLUDED_FILES=(
   "docs/SECURITY.md"
   "scripts/check_secrets.py"
   "scripts/pre-commit"
+  "tests/"  # Exclude test files which use dummy API keys
 )
 
 # Get list of staged files
@@ -44,11 +45,11 @@ for FILE in $STAGED_FILES; do
       break
     fi
   done
-  
+
   if $SKIP; then
     continue
   fi
-  
+
   # Check for sensitive patterns
   for PATTERN in "${PATTERNS[@]}"; do
     MATCHES=$(git diff --cached -U0 "$FILE" | grep -E "$PATTERN")
