@@ -53,6 +53,10 @@ coverage.xml
 .pytest_cache/
 cover/
 
+# Test files with dummy API keys
+tests/test_api_clients.py
+tests/test_api_integrations.py
+
 # Translations
 *.mo
 *.pot
