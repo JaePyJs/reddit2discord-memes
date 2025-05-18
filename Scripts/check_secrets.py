@@ -23,6 +23,18 @@ PATTERNS = [
     r"token\s*=\s*['\"][a-zA-Z0-9_\.\-]+['\"]",
 ]
 
+# Patterns to ignore (example values in documentation)
+IGNORE_PATTERNS = [
+    r"DISCORD_TOKEN=your_discord_token",
+    r"OPENROUTER_API_KEY=your_openrouter_api_key",
+    r"SPOTIFY_CLIENT_ID=your_spotify_client_id",
+    r"SPOTIFY_CLIENT_SECRET=your_spotify_client_secret",
+    r"TENOR_API_KEY=your_tenor_api_key",
+    r"OPENWEATHERMAP_API_KEY=your_openweathermap_api_key",
+    r"YOUR_[A-Z_]+",
+    r"your_[a-z_]+",
+]
+
 # Files to exclude from checking
 EXCLUDED_FILES = [
     ".gitignore",
@@ -49,11 +61,11 @@ def check_file(file_path: str) -> List[Tuple[str, str]]:
     for excluded in EXCLUDED_FILES:
         if excluded in file_path:
             return []
-    
+
     # Skip if file doesn't exist
     if not os.path.exists(file_path):
         return []
-    
+
     # Read file content
     try:
         with open(file_path, "r", encoding="utf-8") as f:
@@ -61,28 +73,38 @@ def check_file(file_path: str) -> List[Tuple[str, str]]:
     except UnicodeDecodeError:
         # Skip binary files
         return []
-    
+
     # Check for sensitive patterns
     matches = []
     for pattern in PATTERNS:
         for match in re.finditer(pattern, content):
-            matches.append((file_path, match.group(0)))
-    
+            match_text = match.group(0)
+
+            # Skip if it matches an ignore pattern
+            should_ignore = False
+            for ignore_pattern in IGNORE_PATTERNS:
+                if re.search(ignore_pattern, match_text):
+                    should_ignore = True
+                    break
+
+            if not should_ignore:
+                matches.append((file_path, match_text))
+
     return matches
 
 def main():
     """Main function."""
     print("Checking for leaked secrets in the codebase...")
-    
+
     # Get all files in the repository
     files = get_all_files()
-    
+
     # Check each file
     all_matches = []
     for file_path in files:
         matches = check_file(file_path)
         all_matches.extend(matches)
-    
+
     # Print results
     if all_matches:
         print(f"Found {len(all_matches)} potential leaked secrets:")
