@@ -1,5 +1,58 @@
 # Changelog
 
+## [2025-05-21] - Critical Security Fix and Enhanced Protection
+
+### Security
+
+- **CRITICAL**: Fixed security vulnerability by removing leaked API keys from commit history
+- Implemented comprehensive security measures to protect API keys:
+  - Added pre-commit hook to prevent committing sensitive information
+  - Created script to check for leaked secrets in the codebase
+  - Added detailed security documentation in `docs/SECURITY.md`
+  - Implemented secure logging system that masks sensitive information
+
+### Added
+
+- Added `bot/utils/secure_logging.py` module with:
+  - Pattern-based detection of sensitive information
+  - Automatic masking of API keys, tokens, and passwords in logs
+  - Secure logger class that wraps standard logging
+- Added `scripts/check_secrets.py` to scan codebase for leaked credentials
+- Added `scripts/pre-commit` hook to prevent committing sensitive information
+- Added `docs/SECURITY.md` with detailed security best practices
+
+### Changed
+
+- Updated all configuration files to use environment variables exclusively
+- Improved error handling for missing or invalid API keys
+- Enhanced documentation with security best practices
+- Updated README.md with security guidelines and installation instructions
+- Updated project structure documentation to include security components
+
+## [2025-05-19] - New API Integrations and Enhanced Analytics
+
+### Added
+
+- Integrated Tenor GIF API for searching and posting GIFs
+  - Added `/gif` command to search for and post GIFs
+  - Added `/trending_gifs` command to show trending GIFs
+- Integrated OpenWeatherMap API for weather forecasting
+  - Added `/weather` command to get current weather for a location
+  - Added `/forecast` command to get weather forecast for a location
+- Integrated Urban Dictionary API for looking up slang terms
+  - Added `/define` command to look up slang terms
+  - Added `/urban_random` command to get random definitions
+- Implemented comprehensive analytics system for tracking feature usage
+- Added performance monitoring for API calls and command execution
+- Enhanced error handling for all API interactions
+
+### Changed
+
+- Consolidated duplicate AI chat implementations into a single module
+- Updated configuration to support new API keys
+- Enhanced Spotify integration with improved caching and analytics
+- Updated documentation to reflect new features and APIs
+
 ## [2025-05-18] - Comprehensive Codebase Reorganization and Spotify Enhancements
 
 ### Added

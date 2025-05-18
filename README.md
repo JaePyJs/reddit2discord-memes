@@ -10,20 +10,27 @@ A versatile Discord bot that brings the freshest memes from Reddit to your serve
 # 1. Install dependencies
 pip install -r requirements.txt
 
-# 2. Configure secrets in .env file
-DISCORD_TOKEN=YOUR_BOT_TOKEN
-YOUTUBE_API_KEY=YOUR_YOUTUBE_API_KEY  # Optional for enhanced YouTube search
-SPOTIFY_CLIENT_ID=YOUR_SPOTIFY_CLIENT_ID  # Required for Spotify integration
-SPOTIFY_CLIENT_SECRET=YOUR_SPOTIFY_CLIENT_SECRET  # Required for Spotify integration
-OPENROUTER_API_KEY=YOUR_OPENROUTER_API_KEY  # Required for AI chat functionality
-BOT_PREFIX=!  # Optional command prefix (default: !)
-DEFAULT_GUILD_ID=YOUR_GUILD_ID  # Optional: for guild-specific commands
+# 2. Copy .env.example to .env and configure your secrets
+cp .env.example .env
+# Edit .env with your API keys and tokens
 
 # 3. Start the bot
 python -m bot.main
 ```
 
 > SQLite database (`data/meme_bot.db`) stores all settings, templates, and user data – safe across restarts.
+
+### 🔐 Security
+
+This project follows strict security practices to protect sensitive information:
+
+- **Never commit API keys or tokens to the repository**
+- Store all sensitive information in the `.env` file (which is git-ignored)
+- Use the provided security tools to prevent accidental leaks:
+  - Pre-commit hook: `cp scripts/pre-commit .git/hooks/ && chmod +x .git/hooks/pre-commit`
+  - Secret scanner: `python scripts/check_secrets.py`
+
+For detailed security guidelines, see [SECURITY.md](docs/SECURITY.md) and [API_SETUP.md](docs/API_SETUP.md).
 
 ---
 
@@ -122,9 +129,31 @@ The bot automatically mutes itself to avoid hearing its own audio output.
 
 ---
 
+## 🌟 Additional Features
+
+### 🖼️ GIF Search
+
+The bot includes integration with the Tenor GIF API:
+
+- `/gif <query>` - Search for and post a GIF
+- `/trending_gifs` - Show trending GIFs
+
+### 🌦️ Weather Forecasts
+
+Get weather information using the OpenWeatherMap API:
+
+- `/weather <location>` - Get current weather for a location
+- `/forecast <location> <days>` - Get weather forecast for a location
+
+### 📚 Urban Dictionary
+
+Look up slang terms and internet culture definitions:
+
+- `/define <term>` - Look up a slang term on Urban Dictionary
+- `/urban_random` - Get a random definition from Urban Dictionary
+
 ## 🗺️ Future Roadmap
 
-• GIF meme support
 • User ratings and leaderboards
 • More music sources (SoundCloud)
 • Advanced audio effects and filters
@@ -145,7 +174,7 @@ The bot automatically mutes itself to avoid hearing its own audio output.
 
 ## 📁 Project Structure
 
-```
+```plaintext
 reddit2discord_memes/
 ├── bot/                      # Main bot package
 │   ├── __init__.py
@@ -163,8 +192,13 @@ reddit2discord_memes/
 │   │   ├── music/            # Music player
 │   │   ├── reddit/           # Reddit integration
 │   │   ├── ai/               # AI chat
+│   │   ├── tenor/            # GIF search
+│   │   ├── weather/          # Weather forecasts
+│   │   ├── urban/            # Urban Dictionary
 │   │   └── profiles/         # User profiles
 │   └── utils/                # Utility functions
+│       ├── secure_logging.py # Secure logging utilities
+│       └── ...               # Other utility modules
 ├── assets/                   # Static assets
 │   └── images/               # Image assets
 ├── templates/                # Meme templates
@@ -172,14 +206,22 @@ reddit2discord_memes/
 │   ├── meme_bot.db           # SQLite database
 │   └── spotify_cache/        # Spotify cache
 ├── docs/                     # Documentation
+│   ├── API_SETUP.md          # API integration setup guide
+│   ├── SECURITY.md           # Security best practices
 │   ├── db_schema.md          # Database schema
 │   └── MONGODB_SETUP.md      # MongoDB setup guide
 ├── scripts/                  # Utility scripts
+│   ├── check_secrets.py      # Script to detect leaked secrets
+│   ├── pre-commit            # Git pre-commit hook for security
+│   ├── README.md             # Scripts documentation
 │   └── reorganize.sh         # Codebase reorganization script
 ├── tests/                    # Test files
+│   ├── core/                 # Core functionality tests
+│   ├── features/             # Feature-specific tests
 │   ├── test_spotify_*.py     # Spotify integration tests
 │   └── test_effects.py       # Meme effects tests
-├── .env                      # Environment variables
+├── .env.example              # Example environment variables (template)
+├── .gitignore                # Git ignore file
 ├── requirements.txt          # Dependencies
 ├── CHANGELOG.md              # Version history
 ├── CONTRIBUTING.md           # Contribution guidelines
@@ -201,3 +243,6 @@ MIT License • 2025
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) - YouTube downloader
 - [Pillow](https://python-pillow.org/) - Image processing library
 - [spotipy](https://github.com/spotipy-dev/spotipy) - Spotify API wrapper
+- [Tenor API](https://developers.google.com/tenor/guides/quickstart) - GIF search API
+- [OpenWeatherMap API](https://openweathermap.org/api) - Weather data API
+- [Urban Dictionary API](https://github.com/zdict/zdict/wiki/Urban-dictionary-API-documentation) - Slang definitions API
